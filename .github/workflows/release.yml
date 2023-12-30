@@ -3,7 +3,7 @@ on:
     types: [published]
 
 jobs:
-  pypi-package:
+  build-pypi-package:
     if: ${{ github.repository == 'recitale/recitale' }}
     runs-on: ubuntu-latest
     name: Build distribution package
@@ -19,6 +19,22 @@ jobs:
           python -m pip install --upgrade build
       - name: Build distribution package
         run: python -m build
+      - name: Upload dist/
+        uses: actions/upload-artifact@v3
+        with:
+          name: pypi-dist-artifact
+          path: dist/
+
+  pypi-package:
+    if: ${{ github.repository == 'recitale/recitale' }}
+    runs-on: ubuntu-latest
+    name: Publish distribution package
+    steps:
+      - name: Download dist/
+        uses: actions/download-artifact@v3
+        with:
+          name: pypi-dist-artifact
+          path: dist/
       - name: Publish package on Pypi
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
