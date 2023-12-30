@@ -29,6 +29,8 @@ jobs:
     if: ${{ github.repository == 'recitale/recitale' }}
     runs-on: ubuntu-latest
     name: Publish distribution package
+    permissions:
+      id-token: write
     steps:
       - name: Download dist/
         uses: actions/download-artifact@v3
@@ -37,9 +39,6 @@ jobs:
           path: dist/
       - name: Publish package on Pypi
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
 
   container:
     if: ${{ github.repository == 'recitale/recitale' }}
