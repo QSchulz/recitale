@@ -1,6 +1,10 @@
 import logging
+import shlex
+import subprocess
+import urllib.parse
 
 from json import dumps as json_dumps
+from json import loads as json_loads
 from pathlib import Path
 from zlib import crc32
 
@@ -10,7 +14,31 @@ from .utils import remove_superficial_options
 logger = logging.getLogger("recitale." + __name__)
 
 
-class Reencode:
+class AudioCommon:
+    def __get_infos(self):
+        if AudioFactory.global_options["binary"] == "ffmpeg":
+            binary = "ffprobe"
+        else:
+            binary = "avprobe"
+        command = (
+            binary
+            + " -v error -show_entries format=duration "
+            + " -print_format json=compact=1 "
+            + shlex.quote(str(self.filepath))
+        )
+        out = subprocess.check_output(shlex.split(command))
+        infos = json_loads(out)
+        self.dur = float(infos["format"]["duration"])
+
+    @property
+    def duration(self):
+        if not hasattr(self, "dur"):
+            self.__get_infos()
+
+        return self.dur
+
+
+class Reencode(AudioCommon):
     def __init__(self, base_filepath, base_id, extension):
         self.filepath = self.__filepath(base_filepath, base_id, "." + extension)
 
@@ -24,7 +52,7 @@ class Reencode:
         return p.parent / (p.stem + suffix)
 
 
-class BaseAudio:
+class BaseAudio(AudioCommon):
     def __init__(self, filepath, global_options):
         self.reencodes = dict()
         self.options = global_options.copy()
@@ -34,9 +62,12 @@ class BaseAudio:
             bytes(json_dumps(self.options, sort_keys=True), "utf-8")
         )
 
+    def _add_reencode(self, reencode):
+        return self.reencodes.setdefault(reencode.filepath, reencode)
+
     def reencode(self):
         reencode = Reencode(self.filepath, self.chksum_opt, self.options["extension"])
-        return self.reencodes.setdefault(reencode.filepath, reencode).filepath.name
+        return urllib.parse.quote(self._add_reencode(reencode).filepath.name)
 
 
 # TODO: add support for looking into parent directories (name: ../other_gallery/pic.jpg)

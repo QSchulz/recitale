@@ -2,6 +2,8 @@
 <img src="logo.png">
 </p>
 
+PLEP
+
 ![GitHub](https://img.shields.io/github/license/recitale/recitale?color=brightgreen)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/recitale)
 ![PyPI - Status](https://img.shields.io/pypi/status/recitale)
@@ -25,7 +27,7 @@ recitale is sections oriented, make it very flexible, many kinds of section alre
 * Paragraph
 * Iframe (Youtube, Maps, etc..)
 * Quote
-* [And more](http://recitale.readthedocs.io/en/latest/sections.html)
+* [And more](https://recitale.readthedocs.io/en/latest/sections.html)
 
 Important note: This project is considered in alpha state. There may be significant changes in configuration files, API or user interface at any time.
 
@@ -55,10 +57,10 @@ recitale currently supports:
  
 You can find example usages here:
 
-* http://surleschemins.fr
-* http://media.faimaison.net/photos/galerie/
+* https://surleschemins.fr
+* https://media.faimaison.net/photos/galerie/
 * https://www.thebrownianmovement.org/
-* http://outside.browny.pink
+* https://outside.browny.pink
 * http://www.street-art.me
  
  ## Code example
@@ -106,9 +108,15 @@ Options:
   --version     Show version.
 ```
 
-## Docker
+## Container
 
-https://hub.docker.com/r/beudbeud/prosopopee/
+A container image is available at ghcr.io/recitale/recitale. One can build their website by running the following command:
+
+```
+docker run --rm -v <PATH_TO_GALLERY_SOURCE>:/var/www ghcr.io/recitale/recitale build
+```
+
+See https://github.com/recitale/recitale/pkgs/container/recitale for fetching instructions and the list of all available images.
 
 ## Licence 
 
@@ -116,7 +124,7 @@ GPL-3.0+
 
 ## Documentation
 
-  http://recitale.readthedocs.org/en/latest/
+  https://recitale.readthedocs.org/en/latest/
 
 ## IRC 
 

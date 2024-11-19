@@ -107,7 +107,7 @@ recitale can use ffmpeg or libav and each can be configured if needed::
       video: "libvpx"
       other: "-qmin 10 -qmax 42 -maxrate 500k -bufsize 1500k"
 
-The meaning of the currently supported FFMEG or LIBAV's settings is as follows :
+The meaning of the currently supported FFMPEG or LIBAV's settings is as follows:
 
  * `binary` sets the binary to use to convert the video (ffmpeg or avconv)
  * `loglevel` sets the logging level used by the library
@@ -130,6 +130,36 @@ example for MP4::
       audio: "acc"
       video: "libx264"
       extension: mp4
+
+Audio converter
+~~~~~~~~~~~~~~~
+
+recitale can use ffmpeg to reencode audio and can be configured if needed::
+
+  title: Gallery
+  settings:
+    ffmpeg_audio:
+      binary: "ffmpeg"
+      loglevel: "error"
+      audio: "libvorbis"
+      extension: "mp3"
+
+The meaning of the currently supported FFMPEG settings is as follows:
+
+ * `binary` sets the binary to use to convert the audio (ffmpeg by default)
+ * `loglevel` sets the logging level used by the library
+ * `audio` sets the audio codec
+ * `extension` sets the extension of output file
+
+example for MP3::
+
+  title: Gallery
+  settings:
+    ffmpeg_audio:
+      binary: "ffmpeg"
+      loglevel: "error"
+      audio: "libmp3lame"
+      extension: "mp3"
 
 Light Mode
 ~~~~~~~~~~
@@ -256,6 +286,8 @@ If you want to protect all the website by password::
   title: Gallery
   password: my_super_password
 
+Please note that only the HTML page will be password-protected. Media content such as images, videos and audio files can still be accessed without password if someone knows or guesses their URL inside a password-protected gallery.
+
 Date locale
 ~~~~~~~~~~~
 
@@ -267,6 +299,15 @@ If you want to use non-based on LC_TIME locale for human-readable dates on galle
 
   settings:
     date_locale: ru_RU
+
+Hide gallery date
+~~~~~~~~~~~~~~~~~
+
+By default, recitale shows dates for all galleries in the landing page, just below each gallery title. However, you can hide it by setting the "show_date" setting to "False" in **root** settings.yaml::
+
+  title: My exploration of the outside world
+  sub_title: it's a scary place, don't go there
+  show_date: False
 
 Gallery settings.yaml
 ---------------------

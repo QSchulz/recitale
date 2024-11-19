@@ -2,6 +2,7 @@ import imagesize
 import logging
 import re
 import sys
+import urllib.parse
 
 from json import dumps as json_dumps
 from pathlib import Path
@@ -75,9 +76,12 @@ class BaseImage(ImageCommon):
 
         return self.thumbnail(self.copysize)
 
+    def _add_thumbnail(self, thumbnail):
+        return self.thumbnails.setdefault(thumbnail.filepath, thumbnail)
+
     def thumbnail(self, size):
         thumbnail = Thumbnail(self.filepath, self.chksum_opt, size)
-        return self.thumbnails.setdefault(thumbnail.filepath, thumbnail).filepath.name
+        return urllib.parse.quote(self._add_thumbnail(thumbnail).filepath.name)
 
 
 # TODO: add support for looking into parent directories (name: ../other_gallery/pic.jpg)

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import http.server
 import struct
+import re
 
 from babel.core import default_locale
 from babel.dates import format_date
@@ -17,11 +18,11 @@ from multiprocessing import Pool, Manager, Process
 from PIL import Image, ImageOps, JpegImagePlugin, ImageFile
 from tqdm import tqdm
 
-from path import Path
+from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from .cache import CACHE
+from .cache import Cache
 from .utils import encrypt, rfc822, load_settings, CustomFormatter
 from .autogen import autogen
 from .__init__ import __version__
@@ -41,58 +42,6 @@ def loglevel(string):
         "takes an integer or a predefined log level from logging module."
     )
 
-
-parser = ArgumentParser(description="Static site generator for your story.")
-parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
-parser.add_argument(
-    "--log-level",
-    default=logging.WARNING,
-    type=loglevel,
-    help="Configure the logging level",
-)
-subparser = parser.add_subparsers(dest="cmd")
-parser_build = subparser.add_parser("build", help="Generate static site")
-parser_build.add_argument(
-    "-j",
-    "--jobs",
-    default=None,
-    type=int,
-    help="Specifies number of jobs (thumbnail generations) to run simultaneously. Default: number "
-    "of threads available on the system",
-)
-subparser.add_parser("test", help="Verify all your yaml data")
-subparser.add_parser("preview", help="Start preview webserver on port 9000")
-subparser.add_parser("deploy", help="Deploy your website")
-parser_autogen = subparser.add_parser("autogen", help="Generate gallery automaticaly")
-group = parser_autogen.add_mutually_exclusive_group(required=True)
-group.add_argument(
-    "-d",
-    dest="folder",
-    metavar="folder",
-    help="folder to use for automatic gallery generation",
-)
-group.add_argument(
-    "--all",
-    action="store_const",
-    const=None,
-    dest="folder",
-    help="find all folders with settings.yaml for automatic gallery generation",
-)
-parser_autogen.add_argument(
-    "--force",
-    action="store_true",
-    help="**DESTRUCTIVE** force regeneration of gallery even if sections are already defined.",
-)
-
-
-DEFAULTS = {
-    "rss": True,
-    "share": False,
-    "settings": {},
-    "show_date": True,
-    "test": False,
-    "include": [],
-}
 
 SETTINGS = {
     "gm": {
@@ -133,6 +82,14 @@ class TCPServerV4(socketserver.TCPServer):
 
 
 def get_settings():
+    DEFAULTS = {
+        "rss": True,
+        "share": False,
+        "settings": {},
+        "show_date": True,
+        "include": [],
+    }
+
     settings = load_settings(".")
 
     for key, value in list(DEFAULTS.items()):
@@ -188,7 +145,7 @@ def get_settings():
 
 def get_local_date_filter(date_locale):
     if date_locale is None:
-        date_locale = default_locale("LC_TIME")
+        date_locale = default_locale("LC_TIME") or "en_US_POSIX"
 
     def local_date(value, date_format="dd MMMM yyyy"):
         return format_date(date=value, format=date_format, locale=date_locale)
@@ -202,7 +159,7 @@ def get_gallery_templates(
     theme_path = Path(__file__).parent.joinpath("themes", theme).exists()
 
     available_themes = theme, "', '".join(
-        Path(__file__).parent.joinpath("themes").listdir()
+        str(path) for path in Path(__file__).parent.joinpath("themes").iterdir()
     )
 
     if not theme_path:
@@ -214,7 +171,7 @@ def get_gallery_templates(
         sys.exit(1)
 
     templates_dir = [
-        Path(".").joinpath("templates").realpath(),
+        Path(".").joinpath("templates").resolve(),
         Path(__file__).parent.joinpath("themes", theme, "templates"),
     ]
 
@@ -229,7 +186,13 @@ def get_gallery_templates(
     subgallery_templates.filters["rfc822"] = rfc822
     subgallery_templates.filters["local_date"] = get_local_date_filter(date_locale)
 
-    Path(".").joinpath("build", gallery_path, "static").rmtree_p()
+    try:
+        buildp = (
+            Path(".").joinpath("build", gallery_path, "static").resolve(strict=True)
+        )
+        shutil.rmtree(buildp)
+    except FileNotFoundError:
+        pass
 
     if Path(".").joinpath("static").exists():
         shutil.copytree(
@@ -260,11 +223,11 @@ def process_directory(
 
     sub_galleries = [
         x
-        for x in Path(".").joinpath(gallery_path).listdir()
+        for x in Path(".").joinpath(gallery_path).iterdir()
         if x.joinpath("settings.yaml").exists()
     ]
 
-    Path("build").joinpath(gallery_path).makedirs_p()
+    Path("build").joinpath(gallery_path).mkdir(parents=True, exist_ok=True)
 
     if not gallery_settings.get("public", True):
         build_gallery(settings, gallery_settings, gallery_path, parent_templates)
@@ -344,8 +307,8 @@ def create_cover(gallery_name, gallery_settings, gallery_path):
 
     gallery_cover = {
         "title": gallery_settings["title"],
-        "link": gallery_path,
-        "name": gallery_name + "/",
+        "link": str(gallery_path),
+        "name": gallery_name,
         "sub_title": gallery_settings.get("sub_title", ""),
         "date": gallery_settings.get("date", ""),
         "tags": gallery_settings.get("tags", ""),
@@ -376,8 +339,8 @@ def __build_gallery(
         Image=ImageFactory,
         Video=VideoFactory,
         Audio=AudioFactory,
-        link=target_gallery_path,
-        name=gallery_path.split("/", 1)[-1],
+        link=str(target_gallery_path),
+        name=gallery_path.name,
     ).encode("Utf-8")
 
     open(Path("build").joinpath(target_gallery_path, "index.html"), "wb").write(html)
@@ -402,7 +365,7 @@ def build_gallery(settings, gallery_settings, gallery_path, template):
     ):
         return
 
-    Path("build").joinpath(gallery_path, "light").makedirs_p()
+    Path("build").joinpath(gallery_path, "light").mkdir(parents=True, exist_ok=True)
     gallery_light_path = Path(gallery_path).joinpath("light")
     light_templates = get_gallery_templates(
         "light", gallery_light_path, date_locale=settings["settings"].get("date_locale")
@@ -462,6 +425,9 @@ def image_params(img, options):
         params["quality"] = options["quality"]
     if "dpi" in img.info:
         params["dpi"] = img.info["dpi"]
+        # For following formats, dpi is of type IFDRational which is not serializable
+        if format in ["JPEG", "MPO", "TIFF"]:
+            params["dpi"] = (float(params["dpi"][0]), float(params["dpi"][1]))
     if format == "JPEG" or format == "MPO":
         params["subsampling"] = JpegImagePlugin.get_sampling(img)
 
@@ -482,11 +448,13 @@ def noncached_images(base):
     for thumbnail in base.thumbnails.values():
         filepath = Path("build") / thumbnail.filepath
 
-        if CACHE.needs_to_be_generated(base.filepath, str(filepath), params):
-            noncached_images.queue.put(1)
+        if noncached_images.shared["cache"].needs_to_be_generated(
+            base.filepath, str(filepath), params
+        ):
+            noncached_images.shared["queue"].put(1)
             return base
 
-    noncached_images.queue.put(1)
+    noncached_images.shared["queue"].put(1)
 
 
 def render_thumbnails(base):
@@ -541,7 +509,9 @@ def render_thumbnails(base):
     for thumbnail in base.thumbnails.values():
         filepath = Path("build") / thumbnail.filepath
 
-        if not CACHE.needs_to_be_generated(base.filepath, str(filepath), params):
+        if not render_thumbnails.shared["cache"].needs_to_be_generated(
+            base.filepath, str(filepath), params
+        ):
             continue
 
         # Needed because im.thumbnail replaces the original image
@@ -609,24 +579,26 @@ def render_thumbnails(base):
             filepath,
             thumbnail.size,
         )
-        CACHE.cache_picture(base.filepath, str(filepath), params)
-    render_thumbnails.queue.put(1)
+        render_thumbnails.shared["cache"].cache_picture(
+            base.filepath, str(filepath), params
+        )
+    render_thumbnails.shared["queue"].put(1)
 
 
-def render_video(base):
+def render_video(cache, base):
     logger.debug("(%s) Rendering thumbnails and reencodes", base.filepath)
     basecmd = "{binary} -loglevel {loglevel} -y -i " + shlex.quote(str(base.filepath))
 
     if base.reencodes:
         reencodecmd = (
             basecmd
-            + " -stats -c:v {video} -b:v {vbitrate} {other} -c:a {audio} -b:a {abitrate} "
-            + "-f {format} "
+            + " -c:v {video} -b:v {vbitrate} {other} -c:a {audio} -b:a {abitrate} "
+            + "-f {format} -progress /dev/stdout "
         )
         for reencode in base.reencodes.values():
             logger.info("Reencoding (%s)" % base.filepath)
             filepath = Path("build") / reencode.filepath
-            if not CACHE.needs_to_be_generated(
+            if not cache.needs_to_be_generated(
                 base.filepath, str(filepath), base.options
             ):
                 continue
@@ -645,13 +617,34 @@ def render_video(base):
             )
             command = command.format(**base.options)
 
-            if subprocess.run(shlex.split(command)).returncode != 0:
+            proc = subprocess.Popen(shlex.split(command), stdout=subprocess.PIPE)
+
+            old_reencoded_secs = 0
+
+            with tqdm(
+                total=base.duration,
+                desc="Reencoding %s" % (str(base.filepath)),
+                leave=False,
+                bar_format="{l_bar}{bar}| {n_fmt}s/{total_fmt}s | ETA: {remaining}",
+            ) as pbar:
+                for content in proc.stdout:
+                    m = re.search(r"out_time_us=(.*)\\n", str(content))
+                    if m and m.group(1):
+                        us = int(m.group(1))
+                        reencoded_secs = us // 1000000
+                        if reencoded_secs - old_reencoded_secs:
+                            pbar.update(reencoded_secs - old_reencoded_secs)
+                        old_reencoded_secs = reencoded_secs
+
+            proc.wait()
+
+            if proc.returncode != 0:
                 logger.error(
                     "An error occured while rendering reencodes for %s", base.filepath
                 )
                 return
 
-            CACHE.cache_picture(base.filepath, str(filepath), base.options)
+            cache.cache_picture(base.filepath, str(filepath), base.options)
 
     if not base.thumbnails:
         return
@@ -660,7 +653,7 @@ def render_video(base):
     command = ""
     for thumbnail in base.thumbnails.values():
         filepath = Path("build") / thumbnail.filepath
-        if not CACHE.needs_to_be_generated(base.filepath, str(filepath), base.options):
+        if not cache.needs_to_be_generated(base.filepath, str(filepath), base.options):
             continue
 
         width, height = thumbnail.size
@@ -689,12 +682,12 @@ def render_video(base):
         return
 
     for thumbnail in uncached:
-        CACHE.cache_picture(base.filepath, str(filepath), base.options)
+        cache.cache_picture(base.filepath, str(filepath), base.options)
 
 
-def reencode_audio(base):
+def reencode_audio(cache, base):
     logger.debug("(%s) Rendering reencodes", base.filepath)
-    basecmd = "{binary} -loglevel {loglevel} -stats -i " + shlex.quote(
+    basecmd = "{binary} -loglevel {loglevel} -progress /dev/stdout -i " + shlex.quote(
         str(base.filepath)
     )
     basecmd = basecmd + " -c:a {audio} -y "
@@ -705,26 +698,123 @@ def reencode_audio(base):
     for reencode in base.reencodes.values():
         logger.info("Reencoding (%s)" % base.filepath)
         filepath = Path("build") / reencode.filepath
-        if not CACHE.needs_to_be_generated(base.filepath, str(filepath), base.options):
+        if not cache.needs_to_be_generated(base.filepath, str(filepath), base.options):
             logger.info("Skipped: %s is already generated", reencode.filepath)
             return
 
-        command = basecmd + shlex.quote(filepath)
+        command = basecmd + shlex.quote(str(filepath))
         command = command.format(**base.options)
 
-        if subprocess.run(shlex.split(command)).returncode != 0:
+        proc = subprocess.Popen(shlex.split(command), stdout=subprocess.PIPE)
+
+        old_reencoded_secs = 0
+
+        with tqdm(
+            total=base.duration,
+            desc="Reencoding %s" % (str(base.filepath)),
+            leave=False,
+            bar_format="{l_bar}{bar}| {n_fmt}s/{total_fmt}s | ETA: {remaining}",
+        ) as pbar:
+            for content in proc.stdout:
+                m = re.search(r"out_time_us=(.*)\\n", str(content))
+                if m and m.group(1):
+                    us = int(m.group(1))
+                    reencoded_secs = us // 1000000
+                    if reencoded_secs - old_reencoded_secs:
+                        pbar.update(reencoded_secs - old_reencoded_secs)
+                    old_reencoded_secs = reencoded_secs
+
+        proc.wait()
+
+        if proc.returncode != 0:
             logger.error(
                 "An error occured while rendering reencodes for %s", base.filepath
             )
             return
 
-        CACHE.cache_picture(base.filepath, str(filepath), base.options)
+        cache.cache_picture(base.filepath, str(filepath), base.options)
+
+
+def set_func_args(initargs):
+    shared, funcs = initargs
+    for func in funcs:
+        func.shared = shared
+
+
+def handle_pbar(desc, queue, pbar_len):
+    with tqdm(
+        total=pbar_len,
+        desc=desc,
+        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} | ETA: {remaining}",
+    ) as pbar:
+        while queue.get():
+            pbar.update()
 
 
 logger = logging.getLogger("recitale")
 
 
 def main():
+    loglevel_parser = ArgumentParser(add_help=False)
+    loglevel_parser.add_argument(
+        "--log-level",
+        default=logging.WARNING,
+        type=loglevel,
+        help="Configure the logging level",
+    )
+
+    parser = ArgumentParser(
+        description="Static site generator for your story.", parents=[loglevel_parser]
+    )
+    parser.add_argument(
+        "--version", action="version", version="%(prog)s " + __version__
+    )
+
+    subparser = parser.add_subparsers(dest="cmd")
+    parser_build = subparser.add_parser(
+        "build", help="Generate static site", parents=[loglevel_parser]
+    )
+    parser_build.add_argument(
+        "-j",
+        "--jobs",
+        default=None,
+        type=int,
+        help="Specifies number of jobs (thumbnail generations) to run simultaneously. Default: "
+        "number of threads available on the system",
+    )
+    subparser.add_parser(
+        "test", help="Verify all your yaml data", parents=[loglevel_parser]
+    )
+    subparser.add_parser(
+        "preview",
+        help="Start preview webserver on port 9000",
+        parents=[loglevel_parser],
+    )
+    subparser.add_parser(
+        "deploy", help="Deploy your website", parents=[loglevel_parser]
+    )
+    parser_autogen = subparser.add_parser(
+        "autogen", help="Generate gallery automaticaly", parents=[loglevel_parser]
+    )
+    group = parser_autogen.add_mutually_exclusive_group(required=True)
+    group.add_argument(
+        "-d",
+        dest="folder",
+        metavar="folder",
+        help="folder to use for automatic gallery generation",
+    )
+    group.add_argument(
+        "--all",
+        action="store_const",
+        const=None,
+        dest="folder",
+        help="find all folders with settings.yaml for automatic gallery generation",
+    )
+    parser_autogen.add_argument(
+        "--force",
+        action="store_true",
+        help="**DESTRUCTIVE** force regeneration of gallery even if sections are already defined.",
+    )
     args = parser.parse_args()
 
     handler = logging.StreamHandler()
@@ -737,7 +827,7 @@ def main():
     front_page_galleries_cover = []
 
     galleries_dirs = [
-        x for x in Path(".").listdir() if x.joinpath("settings.yaml").exists()
+        x for x in Path(".").iterdir() if x.joinpath("settings.yaml").exists()
     ]
     includes = [x for x in settings["include"] if Path(".").joinpath(x).exists()]
 
@@ -748,9 +838,6 @@ def main():
             "INSIDE A DIRECTORY in your current directory), you don't have any gallery?"
         )
         sys.exit(1)
-
-    if args.cmd == "test":
-        DEFAULTS["test"] = True
 
     if args.cmd == "preview":
         if not Path("build").exists():
@@ -806,11 +893,10 @@ def main():
         autogen(args.folder, args.force)
         return
 
-    Path("build").makedirs_p()
+    Path("build").mkdir(parents=True, exist_ok=True)
     theme = settings["settings"].get("theme", "exposure")
     date_locale = settings["settings"].get("date_locale")
     templates = get_gallery_templates(theme, date_locale=date_locale)
-    templates.add_extension("jinja2.ext.with_")
 
     if Path("custom.js").exists():
         shutil.copy(Path("custom.js"), Path(".").joinpath("build", "", "static", "js"))
@@ -830,11 +916,15 @@ def main():
         bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} | ETA: {remaining}",
     ):
         front_page_galleries_cover.append(
-            process_directory(gallery.normpath(), settings, templates)
+            process_directory(
+                gallery.resolve(strict=True).relative_to(Path(".").resolve()),
+                settings,
+                templates,
+            )
         )
 
     for i in includes:
-        srcdir = Path(i).dirname()
+        srcdir = Path(i).parent
         dstdir = Path(".").joinpath("build", srcdir)
         if srcdir != "":
             os.makedirs(dstdir, exist_ok=True)
@@ -858,9 +948,11 @@ def main():
 
     build_index(settings, front_page_galleries_cover, templates)
 
-    if DEFAULTS["test"] is True:
+    if args.cmd == "test":
         logger.info("Success: HTML file building without error")
         sys.exit(0)
+
+    cache = Cache()
 
     # If recitale is started without any argument, 'build' is assumed but the jobs parameter
     # is not part of the namespace, so set its default to None (or 'number of available CPU
@@ -868,29 +960,18 @@ def main():
     jobs = args.jobs if args.cmd else None
 
     try:
-
-        def set_queue(initargs):
-            queue, funcs = initargs
-            for func in funcs:
-                func.queue = queue
-
         pbar_queue = Manager().Queue()
 
         with Pool(
             jobs,
-            initializer=set_queue,
-            initargs=((pbar_queue, [noncached_images, render_thumbnails]),),
+            initializer=set_func_args,
+            initargs=(
+                (
+                    {"queue": pbar_queue, "cache": cache},
+                    [noncached_images, render_thumbnails],
+                ),
+            ),
         ) as pool:
-
-            def handle_pbar(desc, queue, pbar_len):
-                with tqdm(
-                    total=pbar_len,
-                    desc=desc,
-                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} | ETA: {remaining}",
-                ) as pbar:
-                    while queue.get():
-                        pbar.update()
-
             logger.info("Generating list of thumbnails to create...")
 
             pbar = Process(
@@ -936,15 +1017,15 @@ def main():
                 VideoFactory.base_vids.values(),
                 desc="Generating video thumbnails and resizes",
             ):
-                render_video(video)
+                render_video(cache, video)
 
         if len(AudioFactory.base_audios):
             for audio in tqdm(
                 AudioFactory.base_audios.values(), desc="Generating audio reencodes"
             ):
-                reencode_audio(audio)
+                reencode_audio(cache, audio)
     finally:
-        CACHE.cache_dump()
+        cache.cache_dump()
 
 
 if __name__ == "__main__":

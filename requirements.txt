@@ -1,8 +1,8 @@
 Babel
-jinja2
-path.py
-ruamel.yaml
+jinja2>=2.9
+ruamel.yaml<0.18.0
 future
 pillow>=6
+pycryptodomex
 imagesize
 tqdm
