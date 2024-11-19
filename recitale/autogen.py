@@ -42,9 +42,12 @@ def get_exif(filename):
         # DateTimeOriginal, DateTimeDigitized, DateTime(DateTimeModified)
         ctime = exif.get(0x9003, exif.get(0x9004, exif.get(0x0132)))
         if ctime is not None:
+            logger.error('%s: ctime %s' % (filename, ctime))
             return ctime
 
-    return strftime(TIME_FORMAT, gmtime(os.path.getmtime(filename)))
+    s = strftime(TIME_FORMAT, gmtime(os.path.getmtime(filename)))
+    logger.error('%s: mtime: %s' % (filename, s))
+    return s
 
 
 def build_template(folder, force):
