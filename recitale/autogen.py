@@ -72,7 +72,7 @@ def build_template(folder, force):
     template = Template(DATA, trim_blocks=True)
 
     for file in files_grabbed:
-        logger.error('%s exif: %s' % (file, get_exif(file))
+        logger.error('%s exif: %s' % (file, get_exif(file)))
     files = files_grabbed
 
     cover = gallery_settings.get("cover", files[0].name)
