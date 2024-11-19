@@ -72,6 +72,7 @@ def build_template(folder, force):
     template = Template(DATA, trim_blocks=True)
 
     files = sorted(files_grabbed, key=get_exif)
+    logger.error(files)
 
     cover = gallery_settings.get("cover", files[0].name)
     date = gallery_settings.get("date")
