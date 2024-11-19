@@ -198,13 +198,18 @@ sections:
 """
                 )
 
+    def side_effect_oldest_picked(*args, **kwargs):
+        if args[0].name == "test.png":
+            return "2023:06:10 10:10:10"
+        return "2016:10:08 01:01:01"
+
     @patch(
         "recitale.autogen.load_settings",
         return_value={"title": "test", "date": "20230610"},
     )
     @patch(
         "recitale.autogen.get_exif",
-        side_effect=["2023:06:10 10:10:10", "2016:10:08 01:01:01"],
+        side_effect=side_effect_oldest_picked,
     )
     def test_missing_cover_oldest_picked(self, patch_exif, patch_load):
         with TemporaryDirectory() as td:
