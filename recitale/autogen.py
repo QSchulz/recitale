@@ -71,8 +71,9 @@ def build_template(folder, force):
         files_grabbed.extend(Path(folder).glob(files))
     template = Template(DATA, trim_blocks=True)
 
-    files = sorted(files_grabbed, key=get_exif)
-    logger.error(files)
+    for file in files_grabbed:
+        logger.error('%s exif: %s' % (file, get_exif(file))
+    files = files_grabbed
 
     cover = gallery_settings.get("cover", files[0].name)
     date = gallery_settings.get("date")
