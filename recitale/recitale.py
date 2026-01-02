@@ -174,9 +174,7 @@ def get_gallery_templates(
     ]
 
     if theme != "exposure":
-        templates_dir.append(
-            themes_dir.joinpath("exposure", "templates")
-        )
+        templates_dir.append(themes_dir.joinpath("exposure", "templates"))
 
     subgallery_templates = Environment(
         loader=FileSystemLoader(templates_dir), trim_blocks=True
