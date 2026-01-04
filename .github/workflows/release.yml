@@ -59,7 +59,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}
       - name: Build and export to Docker
         id: build
         uses: docker/build-push-action@v6
