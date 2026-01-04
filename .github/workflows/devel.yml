@@ -17,7 +17,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install --upgrade virtualenv tox
       - name: Check code quality
-        run: python -m tox
+        run: python -m tox -p auto
       - name: Upload code coverage
         uses: codecov/codecov-action@v5
         with:
