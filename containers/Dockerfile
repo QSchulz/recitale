@@ -4,7 +4,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install --update --no-install-recomme
 
 ARG VERSION
 
-RUN python3 -m pip install -U recitale==$VERSION
+RUN python3 -m pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ -U recitale==$VERSION
 
 RUN mkdir /var/www/
 
